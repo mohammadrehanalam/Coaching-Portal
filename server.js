@@ -39,24 +39,36 @@ db.connect((err) => {
 });
 
 // Nodemailer Transport Setup
-const EMAIL_USER = process.env.EMAIL_USER || 'mohammadrehanalam71@gmail.com';
-const EMAIL_PASS = process.env.EMAIL_PASS || 'jrwinebdjsmnnxxc';
+const { Resend } = require('resend');
+const resend = new Resend(process.env.RESEND_API_KEY || 're_8uwjDBrn_61LLx5BX8VCoB3imePFWTP2X');
 
-// Render ke liye Port 587 (STARTTLS) Configuration
-const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, // Port 587 ke liye false hona zaroori hai
-    auth: {
-        user: EMAIL_USER,
-        pass: EMAIL_PASS
-    },
-    tls: {
-        rejectUnauthorized: false
-    },
-    connectionTimeout: 10000 // 10 seconds timeout limit
+// Forgot Password API Endpoint ke andar Email Sending Logic:
+app.post('/api/forgot-password', async (req, res) => {
+    const { email } = req.body;
+    const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digit OTP
+
+    try {
+        const { data, error } = await resend.emails.send({
+            from: 'onboarding@resend.dev', // Resend ka default testing email address
+            to: email,
+            subject: 'Password Reset OTP - Coaching Portal',
+            html: `<p>Your OTP for password reset is: <strong>${generatedOtp}</strong></p>`
+        });
+
+        if (error) {
+            console.error('Resend Error:', error);
+            return res.status(500).json({ success: false, message: 'Failed to send OTP email: ' + error.message });
+        }
+
+        // Yahan apna OTP database/session me save karne ka logic rakhein
+        console.log('OTP Sent via Resend:', data);
+        res.json({ success: true, message: 'OTP sent to your email address.' });
+
+    } catch (err) {
+        console.error('Server Error:', err);
+        res.status(500).json({ success: false, message: 'Server error while sending OTP' });
+    }
 });
-
 // ------------------- PAGE ROUTES -------------------
 
 // Student Login Page
