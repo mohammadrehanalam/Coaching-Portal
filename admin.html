@@ -5,51 +5,100 @@
     <title>Admin Panel - Student & Marks Portal</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 30px; background-color: #f4f6f9; }
-        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 25px; max-width: 600px; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 25px; max-width: 800px; }
         h2 { color: #333; margin-top: 0; }
         input, button { width: 100%; padding: 10px; margin: 8px 0; box-sizing: border-box; }
-        button { background-color: #28a745; color: white; border: none; font-weight: bold; cursor: pointer; }
+        button { background-color: #28a745; color: white; border: none; font-weight: bold; cursor: pointer; border-radius: 4px; }
         button:hover { background-color: #218838; }
         .blue-btn { background-color: #007bff; }
         .blue-btn:hover { background-color: #0069d9; }
+        .red-btn { background-color: #dc3545; width: auto; padding: 8px 15px; float: right; }
+        .red-btn:hover { background-color: #c82333; }
+        
+        /* Table Styles */
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; background: white; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: #007bff; color: white; }
+        tr:nth-child(even) { background-color: #f8f9fa; }
     </style>
 </head>
 <body>
 
-    <h1>Admin Dashboard</h1>
+    <div style="max-width: 800px; margin: auto;">
+        <button class="red-btn" onclick="logoutAdmin()">Logout</button>
+        <h1>Admin Dashboard</h1>
 
-    <!-- Form 1: Add New Student -->
-    <div class="card">
-        <h2>1. Add New Student</h2>
-        <input type="text" id="newRoll" placeholder="Roll Number (e.g. 102)">
-        <input type="text" id="newName" placeholder="Student Name (e.g. Amit Sharma)">
-        <input type="password" id="newPassword" placeholder="Set Student Password">
-        <button class="blue-btn" onclick="addStudent()">Add Student</button>
+        <!-- Form 1: Add New Student -->
+        <div class="card">
+            <h2>1. Add New Student</h2>
+            <input type="text" id="newRoll" placeholder="Roll Number (e.g. 102)">
+            <input type="text" id="newName" placeholder="Student Name (e.g. Amit Sharma)">
+            <input type="password" id="newPassword" placeholder="Set Student Password">
+            <button class="blue-btn" onclick="addStudent()">Add Student</button>
+        </div>
+
+        <!-- Form 2: Upload Marks & Copy Link -->
+        <div class="card">
+            <h2>2. Upload Test Result & Copy Link</h2>
+            <input type="text" id="resRoll" placeholder="Student Roll Number (e.g. 102)">
+            <input type="text" id="resTestName" placeholder="Test Name (e.g. Mathematics Chapter 1)">
+            <input type="text" id="resDate" placeholder="Test Date (e.g. 20 Sep 2026)">
+            <input type="number" id="resObtained" placeholder="Marks Obtained">
+            <input type="number" id="resTotal" placeholder="Total Marks">
+            <input type="text" id="resPdf" placeholder="Google Drive / Cloud PDF Link of Checked Copy">
+            <button onclick="addResult()">Upload Score & Copy</button>
+        </div>
+
+        <!-- Section 3: Student Test Scores & Answer Sheets -->
+        <div class="card">
+            <h2>3. Student Test Scores & Answer Sheets</h2>
+            <p style="color: #666; font-size: 14px;">View all student test submissions and inspect detailed answer sheets.</p>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Roll No</th>
+                        <th>Student Name</th>
+                        <th>Test Name</th>
+                        <th>Date</th>
+                        <th>Score</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="resultsTableBody">
+                    <tr>
+                        <td colspan="6" style="text-align: center;">Loading results...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 
-    <!-- Form 2: Upload Marks & Copy Link -->
-    <div class="card">
-        <h2>2. Upload Test Result & Copy Link</h2>
-        <input type="text" id="resRoll" placeholder="Student Roll Number (e.g. 102)">
-        <input type="text" id="resTestName" placeholder="Test Name (e.g. Mathematics Chapter 1)">
-        <input type="text" id="resDate" placeholder="Test Date (e.g. 20 Sep 2026)">
-        <input type="number" id="resObtained" placeholder="Marks Obtained">
-        <input type="number" id="resTotal" placeholder="Total Marks">
-        <input type="text" id="resPdf" placeholder="Google Drive / Cloud PDF Link of Checked Copy">
-        <button onclick="addResult()">Upload Score & Copy</button>
+    <!-- ANSWER SHEET MODAL / POPUP -->
+    <div id="answerSheetModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 1000;">
+        <div style="background: white; padding: 25px; border-radius: 8px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; position: relative;">
+            <button onclick="closeModal()" style="position: absolute; right: 15px; top: 15px; background: #dc3545; color: white; border: none; padding: 5px 12px; border-radius: 4px; cursor: pointer; width: auto;">✕ Close</button>
+            
+            <h3 id="modalStudentTitle" style="margin-bottom: 5px; color: #333;">Answer Sheet</h3>
+            <p id="modalTestMeta" style="color: #666; font-size: 14px; margin-bottom: 15px;"></p>
+            <hr style="margin-bottom: 15px; border: 0; border-top: 1px solid #eee;">
+
+            <div id="modalAnswerContent">
+                <!-- Questions and answers dynamically load honge -->
+            </div>
+        </div>
     </div>
 
     <script>
-       
-    // Direct Access Check
-    if (sessionStorage.getItem('adminSessionToken') !== 'logged_in') {
-        window.location.href = '/admin-login.html';
-    }
+        // Direct Access Check
+        if (sessionStorage.getItem('adminSessionToken') !== 'logged_in') {
+            window.location.href = '/admin-login.html';
+        }
 
-    function logoutAdmin() {
-        sessionStorage.removeItem('adminSessionToken');
-        window.location.href = '/admin-login.html';
-    }
+        function logoutAdmin() {
+            sessionStorage.removeItem('adminSessionToken');
+            window.location.href = '/admin-login.html';
+        }
 
         async function addStudent() {
             const roll_number = document.getElementById('newRoll').value;
@@ -82,7 +131,101 @@
 
             const data = await res.json();
             alert(data.message);
+            loadAllStudentScores(); // Refresh table after adding
         }
+
+        // --- TASK 2: LOAD STUDENT SCORES & VIEW ANSWER SHEETS ---
+
+        // 1. Fetch & Render All Student Scores
+        async function loadAllStudentScores() {
+            try {
+                const response = await fetch('/api/admin/all-results');
+                const data = await response.json();
+
+                if (data.success) {
+                    const tbody = document.getElementById('resultsTableBody');
+                    tbody.innerHTML = '';
+
+                    if (!data.results || data.results.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">No test results found.</td></tr>';
+                        return;
+                    }
+
+                    data.results.forEach(item => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td><b>${item.student_roll}</b></td>
+                            <td>${item.student_name || 'N/A'}</td>
+                            <td>${item.test_name}</td>
+                            <td>${item.test_date ? new Date(item.test_date).toLocaleDateString() : 'N/A'}</td>
+                            <td><span style="color: #28a745; font-weight: bold;">${item.marks_obtained}</span> / ${item.total_marks}</td>
+                            <td>
+                                <button onclick="viewAnswerSheet(${item.id})" class="blue-btn" style="padding: 5px 10px; font-size: 13px;">
+                                    📄 View Answer Sheet
+                                </button>
+                            </td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                }
+            } catch (err) {
+                console.error('Error fetching student scores:', err);
+            }
+        }
+
+        // 2. View Individual Student Answer Sheet
+        async function viewAnswerSheet(resultId) {
+            try {
+                const response = await fetch(`/api/admin/answer-sheet/${resultId}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    const details = data.details;
+                    document.getElementById('modalStudentTitle').innerText = `${details.student_name || details.student_roll} - ${details.test_name}`;
+                    document.getElementById('modalTestMeta').innerText = `Date: ${details.test_date ? new Date(details.test_date).toLocaleDateString() : 'N/A'} | Score: ${details.marks_obtained}/${details.total_marks}`;
+
+                    const container = document.getElementById('modalAnswerContent');
+                    container.innerHTML = '';
+
+                    if (details.answer_sheet) {
+                        try {
+                            const answers = typeof details.answer_sheet === 'string' ? JSON.parse(details.answer_sheet) : details.answer_sheet;
+                            
+                            answers.forEach((q, index) => {
+                                const isCorrect = q.selected === q.correct;
+                                const card = document.createElement('div');
+                                card.style.cssText = `padding: 12px; margin-bottom: 10px; border-radius: 6px; border: 1px solid ${isCorrect ? '#28a745' : '#dc3545'}; background: ${isCorrect ? '#f4fbf7' : '#fff5f5'};`;
+                                
+                                card.innerHTML = `
+                                    <p style="font-weight: bold; margin: 0 0 5px 0;">Q${index + 1}: ${q.question}</p>
+                                    <p style="font-size: 14px; margin: 2px 0;">Selected Answer: <span style="color: ${isCorrect ? '#28a745' : '#dc3545'}; font-weight: bold;">${q.selected || 'Not Answered'}</span></p>
+                                    <p style="font-size: 14px; margin: 2px 0;">Correct Answer: <span style="color: #28a745; font-weight: bold;">${q.correct}</span></p>
+                                `;
+                                container.appendChild(card);
+                            });
+                        } catch (e) {
+                            container.innerHTML = `<p style="word-break: break-all;">Raw Answer Sheet: ${details.answer_sheet}</p>`;
+                        }
+                    } else if (details.pdf_url) {
+                        container.innerHTML = `<p>Answer sheet copy available as PDF:</p><a href="${details.pdf_url}" target="_blank" style="color: #007bff; font-weight: bold; text-decoration: underline;">Open Answer Sheet PDF</a>`;
+                    } else {
+                        container.innerHTML = '<p style="color: #666;">No detailed answer sheet recorded for this test.</p>';
+                    }
+
+                    document.getElementById('answerSheetModal').style.display = 'flex';
+                }
+            } catch (err) {
+                alert('Failed to load answer sheet details.');
+            }
+        }
+
+        // 3. Close Modal
+        function closeModal() {
+            document.getElementById('answerSheetModal').style.display = 'none';
+        }
+
+        // Auto load scores on page start
+        document.addEventListener('DOMContentLoaded', loadAllStudentScores);
     </script>
 </body>
 </html>
