@@ -1,9 +1,9 @@
 const express = require('express');
 const mysql = require('mysql2');
 const path = require('path');
-const nodemailer = require('nodemailer');
 const session = require('express-session');
 const svgCaptcha = require('svg-captcha');
+const { Resend } = require('resend');
 
 const app = express();
 
@@ -38,37 +38,20 @@ db.connect((err) => {
     }
 });
 
-// Nodemailer Transport Setup
-const { Resend } = require('resend');
-const resend = new Resend(process.env.RESEND_API_KEY || 're_8uwjDBrn_61LLx5BX8VCoB3imePFWTP2X');
+// Initialize Resend Email API
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-// Forgot Password API Endpoint ke andar Email Sending Logic:
-app.post('/api/forgot-password', async (req, res) => {
-    const { email } = req.body;
-    const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digit OTP
+// Helper function to send email via Resend
+async function sendOtpEmail(toEmail, subject, otpCode) {
+    return await resend.emails.send({
+        from: 'onboarding@resend.dev',
+        to: toEmail,
+        subject: subject,
+        html: `<p>Your OTP for password reset is: <strong>${otpCode}</strong></p><p>This OTP is valid for 10 minutes.</p>`
+    });
+}
 
-    try {
-        const { data, error } = await resend.emails.send({
-            from: 'onboarding@resend.dev', // Resend ka default testing email address
-            to: email,
-            subject: 'Password Reset OTP - Coaching Portal',
-            html: `<p>Your OTP for password reset is: <strong>${generatedOtp}</strong></p>`
-        });
 
-        if (error) {
-            console.error('Resend Error:', error);
-            return res.status(500).json({ success: false, message: 'Failed to send OTP email: ' + error.message });
-        }
-
-        // Yahan apna OTP database/session me save karne ka logic rakhein
-        console.log('OTP Sent via Resend:', data);
-        res.json({ success: true, message: 'OTP sent to your email address.' });
-
-    } catch (err) {
-        console.error('Server Error:', err);
-        res.status(500).json({ success: false, message: 'Server error while sending OTP' });
-    }
-});
 // ------------------- PAGE ROUTES -------------------
 
 // Student Login Page
@@ -123,7 +106,7 @@ app.post('/api/login', (req, res) => {
     });
 });
 
-// Student Forgot Password - Send OTP
+// Student Forgot Password - Send OTP via Resend API
 app.post('/api/student/forgot-password', (req, res) => {
     const { email } = req.body;
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -135,23 +118,20 @@ app.post('/api/student/forgot-password', (req, res) => {
         }
 
         const updateQuery = 'UPDATE students SET reset_otp = ? WHERE email = ?';
-        db.query(updateQuery, [otp, email], (err) => {
+        db.query(updateQuery, [otp, email], async (err) => {
             if (err) return res.status(500).json({ success: false, message: 'Error saving OTP' });
 
-            const mailOptions = {
-                from: EMAIL_USER,
-                to: email,
-                subject: 'Student Portal - Password Reset OTP',
-                text: `Your OTP for resetting your Student Portal password is: ${otp}\nThis OTP is valid for 10 minutes.`
-            };
-
-            transporter.sendMail(mailOptions, (mailErr) => {
-                if (mailErr) {
-                    console.error("Mail Error:", mailErr);
-                    return res.json({ success: false, message: 'Failed to send OTP email.' });
+            try {
+                const { error } = await sendOtpEmail(email, 'Student Portal - Password Reset OTP', otp);
+                if (error) {
+                    console.error("Resend Error:", error);
+                    return res.json({ success: false, message: 'Failed to send OTP email: ' + error.message });
                 }
                 res.json({ success: true, message: 'OTP sent to your registered email!' });
-            });
+            } catch (mailErr) {
+                console.error("Mail Catch Error:", mailErr);
+                res.json({ success: false, message: 'Failed to send OTP email.' });
+            }
         });
     });
 });
@@ -203,7 +183,7 @@ app.post('/api/admin/login', (req, res) => {
     });
 });
 
-// Admin Forgot Password - Send OTP
+// Admin Forgot Password - Send OTP via Resend API
 app.post('/api/admin/forgot-password', (req, res) => {
     const { email } = req.body;
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -215,23 +195,20 @@ app.post('/api/admin/forgot-password', (req, res) => {
         }
 
         const updateQuery = 'UPDATE admins SET reset_otp = ? WHERE email = ?';
-        db.query(updateQuery, [otp, email], (err) => {
+        db.query(updateQuery, [otp, email], async (err) => {
             if (err) return res.status(500).json({ success: false, message: 'Error saving OTP' });
 
-            const mailOptions = {
-                from: EMAIL_USER,
-                to: email,
-                subject: 'Admin Password Reset OTP',
-                text: `Your OTP for resetting the Admin Password is: ${otp}\nThis OTP is valid for 10 minutes.`
-            };
-
-            transporter.sendMail(mailOptions, (mailErr) => {
-                if (mailErr) {
-                    console.error("Mail Error:", mailErr);
-                    return res.json({ success: false, message: 'Failed to send OTP email.' });
+            try {
+                const { error } = await sendOtpEmail(email, 'Admin Password Reset OTP', otp);
+                if (error) {
+                    console.error("Resend Error:", error);
+                    return res.json({ success: false, message: 'Failed to send OTP email: ' + error.message });
                 }
                 res.json({ success: true, message: 'OTP sent to your email!' });
-            });
+            } catch (mailErr) {
+                console.error("Mail Catch Error:", mailErr);
+                res.json({ success: false, message: 'Failed to send OTP email.' });
+            }
         });
     });
 });
