@@ -42,12 +42,19 @@ db.connect((err) => {
 const EMAIL_USER = process.env.EMAIL_USER || 'mohammadrehanalam71@gmail.com';
 const EMAIL_PASS = process.env.EMAIL_PASS || 'jrwinebdjsmnnxxc';
 
+// Render ke liye Port 587 (STARTTLS) Configuration
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false, // Port 587 ke liye false hona zaroori hai
     auth: {
         user: EMAIL_USER,
         pass: EMAIL_PASS
-    }
+    },
+    tls: {
+        rejectUnauthorized: false
+    },
+    connectionTimeout: 10000 // 10 seconds timeout limit
 });
 
 // ------------------- PAGE ROUTES -------------------
