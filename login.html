@@ -73,6 +73,50 @@
             box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2);
         }
 
+        .captcha-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-top: 5px;
+            background: #f8fafc;
+            padding: 6px 12px;
+            border: 1px dashed #cbd5e1;
+            border-radius: 8px;
+        }
+
+        .btn-reload {
+            background: #e2e8f0;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            color: #334155;
+            transition: background 0.2s ease;
+        }
+
+        .btn-reload:hover {
+            background: #cbd5e1;
+        }
+
+        .forgot-link {
+            text-align: right;
+            margin-top: -10px;
+            margin-bottom: 15px;
+        }
+
+        .forgot-link a {
+            font-size: 13px;
+            color: #4f46e5;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .forgot-link a:hover {
+            text-decoration: underline;
+        }
+
         .btn-submit {
             width: 100%;
             padding: 12px;
@@ -84,6 +128,7 @@
             font-weight: 600;
             cursor: pointer;
             transition: background 0.3s ease;
+            margin-top: 10px;
         }
 
         .btn-submit:hover {
@@ -109,7 +154,7 @@
             <p>Log in to view your result and answer sheet</p>
         </div>
 
-        <div id="error-msg" class="alert-error">Invalid Roll Number or Password!</div>
+        <div id="error-msg" class="alert-error">Invalid Credentials or CAPTCHA!</div>
 
         <form id="loginForm">
             <div class="form-group">
@@ -122,38 +167,70 @@
                 <input type="password" id="password" placeholder="••••••••" required>
             </div>
 
+            <!-- Forgot Password Link -->
+            <div class="forgot-link">
+                <a href="/forgot-password">Forgot Password?</a>
+            </div>
+
+            <!-- CAPTCHA Section -->
+            <div class="form-group">
+                <label for="captcha-input">Enter CAPTCHA</label>
+                <div class="captcha-container">
+                    <span id="captcha-img">Loading...</span>
+                    <button type="button" class="btn-reload" onclick="loadCaptcha()">🔄 Reload</button>
+                </div>
+                <input type="text" id="captcha-input" name="captcha" required style="margin-top: 8px;" placeholder="Type the characters above">
+            </div>
+
             <button type="submit" class="btn-submit">Login</button>
         </form>
     </div>
 
     <script>
-       document.getElementById('loginForm').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    
-    const rollNumber = document.getElementById('rollNumber').value;
-    const password = document.getElementById('password').value;
-
-    try {
-        const response = await fetch('/api/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ rollNumber, password })
-        });
-
-        const data = await response.json();
-
-        if (response.ok && data.success) {
-            localStorage.setItem('studentToken', data.token);
-            localStorage.setItem('studentName', data.student.name);
-            window.location.href = 'dashboard.html';
-        } else {
-            document.getElementById('error-msg').innerText = data.message;
-            document.getElementById('error-msg').style.display = 'block';
+        // Captcha load function
+        function loadCaptcha() {
+            fetch('/api/captcha')
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('captcha-img').innerHTML = data.captcha;
+                    document.getElementById('captcha-input').value = '';
+                })
+                .catch(err => console.error('Error loading captcha:', err));
         }
-    } catch (err) {
-        alert('Server Not Responding!');
-    }
-});
+
+        // DOM load hone par captcha call
+        document.addEventListener('DOMContentLoaded', loadCaptcha);
+
+        // Login form submit handling
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const rollNumber = document.getElementById('rollNumber').value;
+            const password = document.getElementById('password').value;
+            const captcha = document.getElementById('captcha-input').value;
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rollNumber, password, captcha })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    localStorage.setItem('studentToken', data.token);
+                    localStorage.setItem('studentName', data.student.name);
+                    window.location.href = 'dashboard.html';
+                } else {
+                    document.getElementById('error-msg').innerText = data.message || 'Login failed!';
+                    document.getElementById('error-msg').style.display = 'block';
+                    loadCaptcha(); // Reset captcha on error
+                }
+            } catch (err) {
+                alert('Server Not Responding!');
+            }
+        });
     </script>
 </body>
 </html>
