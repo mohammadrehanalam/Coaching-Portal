@@ -115,6 +115,7 @@
             display: flex;
             align-items: center;
             gap: 6px;
+            text-decoration: none;
         }
 
         .btn-view-pdf:hover {
@@ -221,64 +222,66 @@
     </div>
 
     <script>
-        if(!localStorage.getItem('studentToken')) {
-    window.location.href = 'login.html';
-}
+        // Retrieve student data saved during login
+        const student = JSON.parse(localStorage.getItem('student'));
 
-document.getElementById('studentNameDisplay').innerText = localStorage.getItem('studentName') || 'Student';
-document.getElementById('welcomeText').innerText = `Welcome, ${localStorage.getItem('studentName')}!`;
+        if (!student) {
+            window.location.href = 'login.html';
+        } else {
+            document.getElementById('studentNameDisplay').innerText = student.name || 'Student';
+            document.getElementById('welcomeText').innerText = `Welcome, ${student.name || 'Student'}!`;
+            loadResults(student.roll_number);
+        }
 
-// Database se Result Load Karein
-async function loadResults() {
-    const token = localStorage.getItem('studentToken');
-    
-    try {
-        const response = await fetch('/api/my-results', {
-            method: 'GET',
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
+        // Load Results from MySQL via backend API
+        async function loadResults(rollNumber) {
+            try {
+                const response = await fetch(`/api/results/${rollNumber}`);
+                const data = await response.json();
+                
+                const tableBody = document.getElementById('resultsTable');
+                tableBody.innerHTML = '';
 
-        const results = await response.json();
-        const tableBody = document.getElementById('resultsTable');
-        tableBody.innerHTML = '';
+                if (data.success && data.results && data.results.length > 0) {
+                    data.results.forEach(res => {
+                        const formattedDate = res.test_date ? res.test_date.split('T')[0] : 'N/A';
+                        const pdfButton = res.pdf_url 
+                            ? `<button class="btn-view-pdf" onclick="openPdf('${res.test_name}', '${res.pdf_url}')">📄 View Copy</button>` 
+                            : `<span style="color: #94a3b8; font-size: 13px;">No Copy Attached</span>`;
 
-        results.forEach(res => {
-            tableBody.innerHTML += `
-                <tr>
-                    <td><strong>${res.test_name}</strong></td>
-                    <td>${res.test_date}</td>
-                    <td>${res.marks_obtained} / ${res.total_marks}</td>
-                    <td><span class="badge-pass">Checked</span></td>
-                    <td>
-                        <button class="btn-view-pdf" onclick="openPdf('${res.test_name}', '${res.pdf_url}')">
-                            📄 View Copy
-                        </button>
-                    </td>
-                </tr>
-            `;
-        });
-    } catch (err) {
-        console.error('Error fetching results:', err);
-    }
-}
+                        tableBody.innerHTML += `
+                            <tr>
+                                <td><strong>${res.test_name}</strong></td>
+                                <td>${formattedDate}</td>
+                                <td><strong>${res.marks_obtained}</strong> / ${res.total_marks}</td>
+                                <td><span class="badge-pass">Checked</span></td>
+                                <td>${pdfButton}</td>
+                            </tr>
+                        `;
+                    });
+                } else {
+                    tableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #64748b; padding: 20px;">Koi result nahi mila.</td></tr>`;
+                }
+            } catch (err) {
+                console.error('Error fetching results:', err);
+            }
+        }
 
-loadResults();
+        function openPdf(title, url) {
+            document.getElementById('pdfTitle').innerText = title + " - Answer Sheet";
+            document.getElementById('pdfFrame').src = url;
+            document.getElementById('pdfModal').style.display = 'flex';
+        }
 
-function openPdf(title, url) {
-    document.getElementById('pdfTitle').innerText = title + " - Answer Sheet";
-    document.getElementById('pdfFrame').src = url;
-    document.getElementById('pdfModal').style.display = 'flex';
-}
+        function closeModal() {
+            document.getElementById('pdfModal').style.display = 'none';
+            document.getElementById('pdfFrame').src = '';
+        }
 
-function closeModal() {
-    document.getElementById('pdfModal').style.display = 'none';
-    document.getElementById('pdfFrame').src = '';
-}
-
-function logout() {
-    localStorage.clear();
-    window.location.href = 'login.html';
-}
+        function logout() {
+            localStorage.clear();
+            window.location.href = 'login.html';
+        }
     </script>
 </body>
 </html>
