@@ -33,14 +33,14 @@ const db = mysql.createConnection({
     ssl: process.env.DB_HOST ? { rejectUnauthorized: false } : false
 });
 
-// MySQL Connection & Auto Table Alteration
+// MySQL Connection & Auto Table Alterations
 db.connect((err) => {
     if (err) {
         console.error('Database connection failed:', err);
     } else {
         console.log('MySQL Database Connected Successfully!');
 
-        // Check & Add email column automatically
+        // 1. Check & Add email column to students
         db.query("SHOW COLUMNS FROM students LIKE 'email'", (err, results) => {
             if (!err && results.length === 0) {
                 db.query("ALTER TABLE students ADD COLUMN email VARCHAR(255) UNIQUE AFTER name", (err) => {
@@ -50,12 +50,32 @@ db.connect((err) => {
             }
         });
 
-        // Check & Add reset_otp column automatically
+        // 2. Check & Add reset_otp column to students
         db.query("SHOW COLUMNS FROM students LIKE 'reset_otp'", (err, results) => {
             if (!err && results.length === 0) {
                 db.query("ALTER TABLE students ADD COLUMN reset_otp VARCHAR(10) AFTER email", (err) => {
                     if (err) console.error("Error adding reset_otp column:", err);
                     else console.log("Success: 'reset_otp' column added to students table!");
+                });
+            }
+        });
+
+        // 3. Check & Add pdf_url column to test_results
+        db.query("SHOW COLUMNS FROM test_results LIKE 'pdf_url'", (err, results) => {
+            if (!err && results.length === 0) {
+                db.query("ALTER TABLE test_results ADD COLUMN pdf_url TEXT AFTER total_marks", (err) => {
+                    if (err) console.error("Error adding pdf_url column:", err);
+                    else console.log("Success: 'pdf_url' column added to test_results table!");
+                });
+            }
+        });
+
+        // 4. Check & Add answer_sheet column to test_results
+        db.query("SHOW COLUMNS FROM test_results LIKE 'answer_sheet'", (err, results) => {
+            if (!err && results.length === 0) {
+                db.query("ALTER TABLE test_results ADD COLUMN answer_sheet LONGTEXT AFTER pdf_url", (err) => {
+                    if (err) console.error("Error adding answer_sheet column:", err);
+                    else console.log("Success: 'answer_sheet' column added to test_results table!");
                 });
             }
         });
@@ -120,12 +140,10 @@ app.post('/api/login', (req, res) => {
     const { rollNumber, roll_number, password, captcha } = req.body;
     const studentRoll = roll_number || rollNumber;
 
-    // CAPTCHA Verification Check
     if (!captcha || !req.session.captcha || captcha.toLowerCase() !== req.session.captcha) {
         return res.status(400).json({ success: false, message: 'Invalid CAPTCHA! Please try again.' });
     }
 
-    // Reset captcha session after verification attempt
     req.session.captcha = null;
 
     const query = 'SELECT * FROM students WHERE roll_number = ? AND password = ?';
@@ -190,7 +208,7 @@ app.post('/api/student/reset-password', (req, res) => {
 // Fetch Student Individual Results
 app.get('/api/results/:roll', (req, res) => {
     const studentRoll = req.params.roll;
-    const query = 'SELECT * FROM test_results WHERE student_roll = ?';
+    const query = 'SELECT * FROM test_results WHERE student_roll = ? ORDER BY test_date DESC';
     
     db.query(query, [studentRoll], (err, results) => {
         if (err) return res.status(500).json({ success: false, message: 'Server error' });
@@ -270,18 +288,39 @@ app.post('/api/admin/add-student', (req, res) => {
     const query = 'INSERT INTO students (roll_number, name, password, email) VALUES (?, ?, ?, ?)';
     
     db.query(query, [roll_number, name, password, email || null], (err) => {
-        if (err) return res.status(500).json({ success: false, message: 'Roll number already exists or DB error' });
+        if (err) return res.status(500).json({ success: false, message: 'Roll number already exists or DB error: ' + err.message });
         res.json({ success: true, message: 'Student added successfully!' });
     });
 });
 
-// Upload Test Result & Answer Sheet URL
+// FIXED: Upload Test Result & Answer Sheet URL
 app.post('/api/admin/add-result', (req, res) => {
-    const { student_roll, test_name, test_date, marks_obtained, total_marks, pdf_url, answer_sheet_json } = req.body;
-    const query = 'INSERT INTO test_results (student_roll, test_name, test_date, marks_obtained, total_marks, pdf_url, answer_sheet) VALUES (?, ?, ?, ?, ?, ?, ?)';
+    let { student_roll, test_name, test_date, marks_obtained, total_marks, pdf_url, answer_sheet_json } = req.body;
+
+    // Sanitize and handle Date
+    if (!test_date || test_date.trim() === '') {
+        test_date = new Date().toISOString().split('T')[0]; // Auto-set today date YYYY-MM-DD
+    }
+
+    const query = `
+        INSERT INTO test_results 
+        (student_roll, test_name, test_date, marks_obtained, total_marks, pdf_url, answer_sheet) 
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    `;
     
-    db.query(query, [student_roll, test_name, test_date, marks_obtained, total_marks, pdf_url || null, answer_sheet_json || null], (err) => {
-        if (err) return res.status(500).json({ success: false, message: 'Database error' });
+    db.query(query, [
+        student_roll, 
+        test_name, 
+        test_date, 
+        parseFloat(marks_obtained) || 0, 
+        parseFloat(total_marks) || 0, 
+        pdf_url || null, 
+        answer_sheet_json || null
+    ], (err) => {
+        if (err) {
+            console.error("Database Error on add-result:", err);
+            return res.status(500).json({ success: false, message: 'Database Error: ' + err.sqlMessage || err.message });
+        }
         res.json({ success: true, message: 'Result uploaded successfully!' });
     });
 });
@@ -317,13 +356,6 @@ app.get('/api/admin/answer-sheet/:resultId', (req, res) => {
     });
 });
 
-
-// Server Port Setup
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
-
 // Quick API to update testing email for any student
 app.get('/api/test-set-email', (req, res) => {
     const { roll, email } = req.query;
@@ -337,4 +369,10 @@ app.get('/api/test-set-email', (req, res) => {
         if (result.affectedRows === 0) return res.send("Student Roll Number Not Found!");
         res.send(`Successfully updated Email for Roll Number ${roll} to ${email}`);
     });
+});
+
+// Server Port Setup
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });
