@@ -7,6 +7,9 @@ const { Resend } = require('resend');
 
 const app = express();
 
+// Initialize Resend Email API
+const resend = new Resend(process.env.RESEND_API_KEY);
+
 // Middlewares
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -37,10 +40,6 @@ db.connect((err) => {
         console.log('MySQL Database Connected Successfully!');
     }
 });
-
-// Initialize Resend Email API
-const { Resend } = require('resend');
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Helper function to send email via Resend
 async function sendOtpEmail(toEmail, subject, otpCode) {
