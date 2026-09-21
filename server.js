@@ -39,16 +39,29 @@ db.connect((err) => {
 });
 
 // Initialize Resend Email API
+const { Resend } = require('resend');
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Helper function to send email via Resend
 async function sendOtpEmail(toEmail, subject, otpCode) {
-    return await resend.emails.send({
-        from: 'onboarding@resend.dev',
-        to: toEmail,
-        subject: subject,
-        html: `<p>Your OTP for password reset is: <strong>${otpCode}</strong></p><p>This OTP is valid for 10 minutes.</p>`
-    });
+    try {
+        const { data, error } = await resend.emails.send({
+            from: 'onboarding@resend.dev',
+            to: [toEmail],
+            subject: subject,
+            html: `<p>Your OTP for password reset is: <strong>${otpCode}</strong></p><p>This OTP is valid for 10 minutes.</p>`
+        });
+
+        if (error) {
+            console.error('Resend Delivery Error:', error);
+            return { success: false, error: error.message };
+        }
+
+        return { success: true, data };
+    } catch (err) {
+        console.error('Resend Execution Exception:', err);
+        return { success: false, error: err.message };
+    }
 }
 
 
