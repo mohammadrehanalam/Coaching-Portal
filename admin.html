@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Panel - Student & Marks Portal</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 30px; background-color: #f4f6f9; }
@@ -12,6 +13,8 @@
         button:hover { background-color: #218838; }
         .blue-btn { background-color: #007bff; }
         .blue-btn:hover { background-color: #0069d9; }
+        .purple-btn { background-color: #6f42c1; }
+        .purple-btn:hover { background-color: #5a32a3; }
         .red-btn { background-color: #dc3545; width: auto; padding: 8px 15px; float: right; }
         .red-btn:hover { background-color: #c82333; }
         
@@ -37,9 +40,18 @@
             <button class="blue-btn" onclick="addStudent()">Add Student</button>
         </div>
 
+        <!-- Form 1B: Register / Update Student Email (NEW FORGOT PASSWORD FUNCTIONALITY) -->
+        <div class="card">
+            <h2>2. Register / Update Student Email</h2>
+            <p style="color: #666; font-size: 14px; margin-bottom: 10px;">Set email for password reset (OTP) functionality.</p>
+            <input type="text" id="updateRoll" placeholder="Student Roll Number (e.g. 102)">
+            <input type="email" id="updateEmail" placeholder="Student Email Address (e.g. student@gmail.com)">
+            <button class="purple-btn" onclick="updateStudentEmail()">Save / Update Email</button>
+        </div>
+
         <!-- Form 2: Upload Marks & Copy Link -->
         <div class="card">
-            <h2>2. Upload Test Result & Copy Link</h2>
+            <h2>3. Upload Test Result & Copy Link</h2>
             <input type="text" id="resRoll" placeholder="Student Roll Number (e.g. 102)">
             <input type="text" id="resTestName" placeholder="Test Name (e.g. Mathematics Chapter 1)">
             <input type="text" id="resDate" placeholder="Test Date (e.g. 20 Sep 2026)">
@@ -51,7 +63,7 @@
 
         <!-- Section 3: Student Test Scores & Answer Sheets -->
         <div class="card">
-            <h2>3. Student Test Scores & Answer Sheets</h2>
+            <h2>4. Student Test Scores & Answer Sheets</h2>
             <p style="color: #666; font-size: 14px;">View all student test submissions and inspect detailed answer sheets.</p>
             
             <table>
@@ -101,42 +113,80 @@
         }
 
         async function addStudent() {
-            const roll_number = document.getElementById('newRoll').value;
-            const name = document.getElementById('newName').value;
-            const password = document.getElementById('newPassword').value;
+            const roll_number = document.getElementById('newRoll').value.trim();
+            const name = document.getElementById('newName').value.trim();
+            const password = document.getElementById('newPassword').value.trim();
 
-            const res = await fetch('/api/admin/add-student', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ roll_number, name, password })
-            });
+            if (!roll_number || !name || !password) {
+                alert('Kripya saare fields fill karein!');
+                return;
+            }
 
-            const data = await res.json();
-            alert(data.message);
+            try {
+                const res = await fetch('/api/admin/add-student', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ roll_number, name, password })
+                });
+
+                const data = await res.json();
+                alert(data.message);
+                if (data.success) {
+                    document.getElementById('newRoll').value = '';
+                    document.getElementById('newName').value = '';
+                    document.getElementById('newPassword').value = '';
+                }
+            } catch (err) {
+                alert('Failed to add student');
+            }
+        }
+
+        // --- NEW: Register/Update Student Email API Integration ---
+        async function updateStudentEmail() {
+            const roll = document.getElementById('updateRoll').value.trim();
+            const email = document.getElementById('updateEmail').value.trim();
+
+            if (!roll || !email) {
+                alert('Roll Number aur Email dono enter karein!');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/test-set-email?roll=${encodeURIComponent(roll)}&email=${encodeURIComponent(email)}`);
+                const text = await response.text();
+                alert(text);
+                
+                document.getElementById('updateRoll').value = '';
+                document.getElementById('updateEmail').value = '';
+            } catch (err) {
+                alert('Error updating email!');
+            }
         }
 
         async function addResult() {
-            const student_roll = document.getElementById('resRoll').value;
-            const test_name = document.getElementById('resTestName').value;
-            const test_date = document.getElementById('resDate').value;
-            const marks_obtained = document.getElementById('resObtained').value;
-            const total_marks = document.getElementById('resTotal').value;
-            const pdf_url = document.getElementById('resPdf').value;
+            const student_roll = document.getElementById('resRoll').value.trim();
+            const test_name = document.getElementById('resTestName').value.trim();
+            const test_date = document.getElementById('resDate').value.trim();
+            const marks_obtained = document.getElementById('resObtained').value.trim();
+            const total_marks = document.getElementById('resTotal').value.trim();
+            const pdf_url = document.getElementById('resPdf').value.trim();
 
-            const res = await fetch('/api/admin/add-result', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ student_roll, test_name, test_date, marks_obtained, total_marks, pdf_url })
-            });
+            try {
+                const res = await fetch('/api/admin/add-result', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ student_roll, test_name, test_date, marks_obtained, total_marks, pdf_url })
+                });
 
-            const data = await res.json();
-            alert(data.message);
-            loadAllStudentScores(); // Refresh table after adding
+                const data = await res.json();
+                alert(data.message);
+                loadAllStudentScores();
+            } catch (err) {
+                alert('Failed to upload result');
+            }
         }
 
-        // --- TASK 2: LOAD STUDENT SCORES & VIEW ANSWER SHEETS ---
-
-        // 1. Fetch & Render All Student Scores
+        // --- FETCH & RENDER ALL STUDENT SCORES ---
         async function loadAllStudentScores() {
             try {
                 const response = await fetch('/api/admin/all-results');
@@ -173,7 +223,7 @@
             }
         }
 
-        // 2. View Individual Student Answer Sheet
+        // --- VIEW INDIVIDUAL ANSWER SHEET ---
         async function viewAnswerSheet(resultId) {
             try {
                 const response = await fetch(`/api/admin/answer-sheet/${resultId}`);
@@ -219,12 +269,10 @@
             }
         }
 
-        // 3. Close Modal
         function closeModal() {
             document.getElementById('answerSheetModal').style.display = 'none';
         }
 
-        // Auto load scores on page start
         document.addEventListener('DOMContentLoaded', loadAllStudentScores);
     </script>
 </body>
