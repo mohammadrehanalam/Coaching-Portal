@@ -33,11 +33,32 @@ const db = mysql.createConnection({
     ssl: process.env.DB_HOST ? { rejectUnauthorized: false } : false
 });
 
+// MySQL Connection & Auto Table Alteration
 db.connect((err) => {
     if (err) {
         console.error('Database connection failed:', err);
     } else {
         console.log('MySQL Database Connected Successfully!');
+
+        // Check & Add email column automatically
+        db.query("SHOW COLUMNS FROM students LIKE 'email'", (err, results) => {
+            if (!err && results.length === 0) {
+                db.query("ALTER TABLE students ADD COLUMN email VARCHAR(255) UNIQUE AFTER name", (err) => {
+                    if (err) console.error("Error adding email column:", err);
+                    else console.log("Success: 'email' column added to students table!");
+                });
+            }
+        });
+
+        // Check & Add reset_otp column automatically
+        db.query("SHOW COLUMNS FROM students LIKE 'reset_otp'", (err, results) => {
+            if (!err && results.length === 0) {
+                db.query("ALTER TABLE students ADD COLUMN reset_otp VARCHAR(10) AFTER email", (err) => {
+                    if (err) console.error("Error adding reset_otp column:", err);
+                    else console.log("Success: 'reset_otp' column added to students table!");
+                });
+            }
+        });
     }
 });
 
@@ -301,4 +322,19 @@ app.get('/api/admin/answer-sheet/:resultId', (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+});
+
+// Quick API to update testing email for any student
+app.get('/api/test-set-email', (req, res) => {
+    const { roll, email } = req.query;
+    if (!roll || !email) {
+        return res.send("Usage: /api/test-set-email?roll=STU101&email=your_testing_email@gmail.com");
+    }
+
+    const query = 'UPDATE students SET email = ? WHERE roll_number = ?';
+    db.query(query, [email.trim().toLowerCase(), roll], (err, result) => {
+        if (err) return res.send("Error updating email: " + err.message);
+        if (result.affectedRows === 0) return res.send("Student Roll Number Not Found!");
+        res.send(`Successfully updated Email for Roll Number ${roll} to ${email}`);
+    });
 });
