@@ -6,7 +6,7 @@
     <title>Admin Panel - Student & Marks Portal</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 30px; background-color: #f4f6f9; }
-        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 25px; max-width: 800px; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 25px; max-width: 900px; }
         h2 { color: #333; margin-top: 0; }
         input, button { width: 100%; padding: 10px; margin: 8px 0; box-sizing: border-box; }
         button { background-color: #28a745; color: white; border: none; font-weight: bold; cursor: pointer; border-radius: 4px; }
@@ -15,20 +15,27 @@
         .blue-btn:hover { background-color: #0069d9; }
         .purple-btn { background-color: #6f42c1; }
         .purple-btn:hover { background-color: #5a32a3; }
-        .red-btn { background-color: #dc3545; width: auto; padding: 8px 15px; float: right; }
+        .yellow-btn { background-color: #ffc107; color: #212529; width: auto; padding: 6px 12px; margin: 2px; }
+        .yellow-btn:hover { background-color: #e0a800; }
+        .red-btn { background-color: #dc3545; width: auto; padding: 6px 12px; margin: 2px; }
         .red-btn:hover { background-color: #c82333; }
+        .logout-btn { background-color: #dc3545; width: auto; padding: 8px 15px; float: right; }
         
         /* Table Styles */
         table { width: 100%; border-collapse: collapse; margin-top: 15px; background: white; }
         th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
         th { background-color: #007bff; color: white; }
         tr:nth-child(even) { background-color: #f8f9fa; }
+
+        /* Modal Styles */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: white; padding: 25px; border-radius: 8px; max-width: 500px; width: 90%; max-height: 85vh; overflow-y: auto; position: relative; }
     </style>
 </head>
 <body>
 
-    <div style="max-width: 800px; margin: auto;">
-        <button class="red-btn" onclick="logoutAdmin()">Logout</button>
+    <div style="max-width: 900px; margin: auto;">
+        <button class="logout-btn" onclick="logoutAdmin()">Logout</button>
         <h1>Admin Dashboard</h1>
 
         <!-- Form 1: Add New Student -->
@@ -40,21 +47,41 @@
             <button class="blue-btn" onclick="addStudent()">Add Student</button>
         </div>
 
-        <!-- Form 1B: Register / Update Student Email (NEW FORGOT PASSWORD FUNCTIONALITY) -->
+        <!-- Form 1B: Quick Register / Update Student Email -->
         <div class="card">
-            <h2>2. Register / Update Student Email</h2>
+            <h2>2. Quick Update Student Email</h2>
             <p style="color: #666; font-size: 14px; margin-bottom: 10px;">Set email for password reset (OTP) functionality.</p>
             <input type="text" id="updateRoll" placeholder="Student Roll Number (e.g. 102)">
             <input type="email" id="updateEmail" placeholder="Student Email Address (e.g. student@gmail.com)">
             <button class="purple-btn" onclick="updateStudentEmail()">Save / Update Email</button>
         </div>
 
+        <!-- Section: Students Directory -->
+        <div class="card">
+            <h2>3. Registered Students Directory</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Roll No</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="studentsTableBody">
+                    <tr>
+                        <td colspan="4" style="text-align: center;">Loading students...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
         <!-- Form 2: Upload Marks & Copy Link -->
         <div class="card">
-            <h2>3. Upload Test Result & Copy Link</h2>
+            <h2>4. Upload Test Result & Copy Link</h2>
             <input type="text" id="resRoll" placeholder="Student Roll Number (e.g. 102)">
             <input type="text" id="resTestName" placeholder="Test Name (e.g. Mathematics Chapter 1)">
-            <input type="text" id="resDate" placeholder="Test Date (e.g. 20 Sep 2026)">
+            <input type="text" id="resDate" placeholder="Test Date (e.g. 2026-09-20)">
             <input type="number" id="resObtained" placeholder="Marks Obtained">
             <input type="number" id="resTotal" placeholder="Total Marks">
             <input type="text" id="resPdf" placeholder="Google Drive / Cloud PDF Link of Checked Copy">
@@ -63,7 +90,7 @@
 
         <!-- Section 3: Student Test Scores & Answer Sheets -->
         <div class="card">
-            <h2>4. Student Test Scores & Answer Sheets</h2>
+            <h2>5. Student Test Scores & Answer Sheets</h2>
             <p style="color: #666; font-size: 14px;">View all student test submissions and inspect detailed answer sheets.</p>
             
             <table>
@@ -86,18 +113,48 @@
         </div>
     </div>
 
-    <!-- ANSWER SHEET MODAL / POPUP -->
-    <div id="answerSheetModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 1000;">
-        <div style="background: white; padding: 25px; border-radius: 8px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; position: relative;">
-            <button onclick="closeModal()" style="position: absolute; right: 15px; top: 15px; background: #dc3545; color: white; border: none; padding: 5px 12px; border-radius: 4px; cursor: pointer; width: auto;">✕ Close</button>
-            
+    <!-- EDIT STUDENT MODAL -->
+    <div id="editStudentModal" class="modal">
+        <div class="modal-content">
+            <button onclick="closeModal('editStudentModal')" style="position: absolute; right: 15px; top: 15px; width: auto;" class="red-btn">✕ Close</button>
+            <h3 style="margin-bottom: 15px;">Edit Student Details</h3>
+            <input type="hidden" id="editStudentId">
+            <label>Student Name:</label>
+            <input type="text" id="editStudentName">
+            <label>Roll Number:</label>
+            <input type="text" id="editStudentRoll">
+            <label>Email Address:</label>
+            <input type="email" id="editStudentEmail">
+            <button onclick="saveStudentEdit()" class="blue-btn" style="margin-top: 15px;">Save Changes</button>
+        </div>
+    </div>
+
+    <!-- EDIT RESULT MODAL -->
+    <div id="editResultModal" class="modal">
+        <div class="modal-content">
+            <button onclick="closeModal('editResultModal')" style="position: absolute; right: 15px; top: 15px; width: auto;" class="red-btn">✕ Close</button>
+            <h3 style="margin-bottom: 15px;">Edit Test Result</h3>
+            <input type="hidden" id="editResultId">
+            <label>Test Name:</label>
+            <input type="text" id="editTestName">
+            <label>Marks Obtained:</label>
+            <input type="number" id="editMarksObtained">
+            <label>Total Marks:</label>
+            <input type="number" id="editTotalMarks">
+            <label>PDF Copy Link:</label>
+            <input type="text" id="editPdfUrl">
+            <button onclick="saveResultEdit()" class="blue-btn" style="margin-top: 15px;">Save Result Changes</button>
+        </div>
+    </div>
+
+    <!-- ANSWER SHEET MODAL -->
+    <div id="answerSheetModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <button onclick="closeModal('answerSheetModal')" style="position: absolute; right: 15px; top: 15px; width: auto;" class="red-btn">✕ Close</button>
             <h3 id="modalStudentTitle" style="margin-bottom: 5px; color: #333;">Answer Sheet</h3>
             <p id="modalTestMeta" style="color: #666; font-size: 14px; margin-bottom: 15px;"></p>
             <hr style="margin-bottom: 15px; border: 0; border-top: 1px solid #eee;">
-
-            <div id="modalAnswerContent">
-                <!-- Questions and answers dynamically load honge -->
-            </div>
+            <div id="modalAnswerContent"></div>
         </div>
     </div>
 
@@ -110,6 +167,36 @@
         function logoutAdmin() {
             sessionStorage.removeItem('adminSessionToken');
             window.location.href = '/admin-login.html';
+        }
+
+        // --- LOAD STUDENTS LIST ---
+        async function loadStudents() {
+            try {
+                const res = await fetch('/api/admin/students');
+                const data = await res.json();
+                const tbody = document.getElementById('studentsTableBody');
+                tbody.innerHTML = '';
+
+                if (data.success && data.students.length > 0) {
+                    data.students.forEach(st => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td><b>${st.roll_number}</b></td>
+                            <td>${st.name}</td>
+                            <td>${st.email || 'N/A'}</td>
+                            <td>
+                                <button class="yellow-btn" onclick="openStudentEditModal(${st.id}, '${st.name}', '${st.roll_number}', '${st.email || ''}')">Edit</button>
+                                <button class="red-btn" onclick="deleteStudent(${st.id})">Delete</button>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">No students registered yet.</td></tr>';
+                }
+            } catch (err) {
+                console.error("Error loading students:", err);
+            }
         }
 
         async function addStudent() {
@@ -135,13 +222,57 @@
                     document.getElementById('newRoll').value = '';
                     document.getElementById('newName').value = '';
                     document.getElementById('newPassword').value = '';
+                    loadStudents();
                 }
             } catch (err) {
                 alert('Failed to add student');
             }
         }
 
-        // --- NEW: Register/Update Student Email API Integration ---
+        function openStudentEditModal(id, name, roll, email) {
+            document.getElementById('editStudentId').value = id;
+            document.getElementById('editStudentName').value = name;
+            document.getElementById('editStudentRoll').value = roll;
+            document.getElementById('editStudentEmail').value = email;
+            document.getElementById('editStudentModal').style.display = 'flex';
+        }
+
+        async function saveStudentEdit() {
+            const id = document.getElementById('editStudentId').value;
+            const name = document.getElementById('editStudentName').value.trim();
+            const roll_number = document.getElementById('editStudentRoll').value.trim();
+            const email = document.getElementById('editStudentEmail').value.trim();
+
+            try {
+                const res = await fetch(`/api/admin/students/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, roll_number, email })
+                });
+                const data = await res.json();
+                alert(data.message);
+                if (data.success) {
+                    closeModal('editStudentModal');
+                    loadStudents();
+                }
+            } catch (err) {
+                alert('Failed to update student');
+            }
+        }
+
+        async function deleteStudent(id) {
+            if (confirm("Kya aap is student ko delete karna chahte hain?")) {
+                try {
+                    const res = await fetch(`/api/admin/students/${id}`, { method: 'DELETE' });
+                    const data = await res.json();
+                    alert(data.message);
+                    if (data.success) loadStudents();
+                } catch (err) {
+                    alert('Failed to delete student');
+                }
+            }
+        }
+
         async function updateStudentEmail() {
             const roll = document.getElementById('updateRoll').value.trim();
             const email = document.getElementById('updateEmail').value.trim();
@@ -158,11 +289,13 @@
                 
                 document.getElementById('updateRoll').value = '';
                 document.getElementById('updateEmail').value = '';
+                loadStudents();
             } catch (err) {
                 alert('Error updating email!');
             }
         }
 
+        // --- TEST RESULTS LOGIC ---
         async function addResult() {
             const student_roll = document.getElementById('resRoll').value.trim();
             const test_name = document.getElementById('resTestName').value.trim();
@@ -186,7 +319,6 @@
             }
         }
 
-        // --- FETCH & RENDER ALL STUDENT SCORES ---
         async function loadAllStudentScores() {
             try {
                 const response = await fetch('/api/admin/all-results');
@@ -210,9 +342,9 @@
                             <td>${item.test_date ? new Date(item.test_date).toLocaleDateString() : 'N/A'}</td>
                             <td><span style="color: #28a745; font-weight: bold;">${item.marks_obtained}</span> / ${item.total_marks}</td>
                             <td>
-                                <button onclick="viewAnswerSheet(${item.id})" class="blue-btn" style="padding: 5px 10px; font-size: 13px;">
-                                    📄 View Answer Sheet
-                                </button>
+                                <button onclick="viewAnswerSheet(${item.id})" class="blue-btn" style="padding: 5px 10px; font-size: 13px; width: auto;">📄 View Sheet</button>
+                                <button class="yellow-btn" onclick="openResultEditModal(${item.id}, '${item.test_name}', ${item.marks_obtained}, ${item.total_marks}, '${item.pdf_url || ''}')">Edit</button>
+                                <button class="red-btn" onclick="deleteResult(${item.id})">Delete</button>
                             </td>
                         `;
                         tbody.appendChild(row);
@@ -223,7 +355,52 @@
             }
         }
 
-        // --- VIEW INDIVIDUAL ANSWER SHEET ---
+        function openResultEditModal(id, testName, marks, total, pdfUrl) {
+            document.getElementById('editResultId').value = id;
+            document.getElementById('editTestName').value = testName;
+            document.getElementById('editMarksObtained').value = marks;
+            document.getElementById('editTotalMarks').value = total;
+            document.getElementById('editPdfUrl').value = pdfUrl;
+            document.getElementById('editResultModal').style.display = 'flex';
+        }
+
+        async function saveResultEdit() {
+            const id = document.getElementById('editResultId').value;
+            const test_name = document.getElementById('editTestName').value.trim();
+            const marks_obtained = document.getElementById('editMarksObtained').value.trim();
+            const total_marks = document.getElementById('editTotalMarks').value.trim();
+            const pdf_url = document.getElementById('editPdfUrl').value.trim();
+
+            try {
+                const res = await fetch(`/api/results/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ test_name, marks_obtained, total_marks, pdf_url })
+                });
+                const data = await res.json();
+                alert(data.message);
+                if (data.success) {
+                    closeModal('editResultModal');
+                    loadAllStudentScores();
+                }
+            } catch (err) {
+                alert('Failed to update result');
+            }
+        }
+
+        async function deleteResult(id) {
+            if (confirm("Kya aap is result ko delete karna chahte hain?")) {
+                try {
+                    const res = await fetch(`/api/results/${id}`, { method: 'DELETE' });
+                    const data = await res.json();
+                    alert(data.message);
+                    if (data.success) loadAllStudentScores();
+                } catch (err) {
+                    alert('Failed to delete result');
+                }
+            }
+        }
+
         async function viewAnswerSheet(resultId) {
             try {
                 const response = await fetch(`/api/admin/answer-sheet/${resultId}`);
@@ -269,11 +446,14 @@
             }
         }
 
-        function closeModal() {
-            document.getElementById('answerSheetModal').style.display = 'none';
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
         }
 
-        document.addEventListener('DOMContentLoaded', loadAllStudentScores);
+        document.addEventListener('DOMContentLoaded', () => {
+            loadStudents();
+            loadAllStudentScores();
+        });
     </script>
 </body>
 </html>
