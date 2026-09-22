@@ -222,21 +222,32 @@
     </div>
 
     <script>
-        // Retrieve student data saved during login
-        const student = JSON.parse(localStorage.getItem('student'));
+        // Retrieve student data safely
+        let student = null;
+        try {
+            const rawData = localStorage.getItem('student');
+            if (rawData) {
+                student = JSON.parse(rawData);
+            }
+        } catch (e) {
+            console.error("Error parsing student data from localStorage:", e);
+        }
 
-        if (!student) {
+        // Roll number check for both camelCase and snake_case
+        const rollNumber = student ? (student.roll_number || student.rollNumber) : null;
+
+        if (!student || !rollNumber) {
             window.location.href = 'login.html';
         } else {
             document.getElementById('studentNameDisplay').innerText = student.name || 'Student';
             document.getElementById('welcomeText').innerText = `Welcome, ${student.name || 'Student'}!`;
-            loadResults(student.roll_number);
+            loadResults(rollNumber);
         }
 
         // Load Results from MySQL via backend API
-        async function loadResults(rollNumber) {
+        async function loadResults(rollNo) {
             try {
-                const response = await fetch(`/api/results/${rollNumber}`);
+                const response = await fetch(`/api/results/${rollNo}`);
                 const data = await response.json();
                 
                 const tableBody = document.getElementById('resultsTable');

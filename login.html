@@ -277,7 +277,7 @@
         // DOM load hone par captcha call
         document.addEventListener('DOMContentLoaded', loadCaptcha);
 
-        // Login form submit handling
+        // Login form submit handling (FIXED DATA SAVE LOGIC)
         document.getElementById('loginForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
@@ -289,14 +289,16 @@
                 const response = await fetch('/api/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ rollNumber, password, captcha })
+                    body: JSON.stringify({ rollNumber, roll_number: rollNumber, password, captcha })
                 });
 
                 const data = await response.json();
 
                 if (response.ok && data.success) {
-                    localStorage.setItem('studentToken', data.token || 'logged_in');
-                    localStorage.setItem('studentName', data.student.name);
+                    // FIX: Save complete student object in localStorage so dashboard can read it
+                    localStorage.setItem('student', JSON.stringify(data.student));
+                    
+                    // Redirect to dashboard page
                     window.location.href = 'dashboard.html';
                 } else {
                     document.getElementById('error-msg').innerText = data.message || 'Login failed!';
