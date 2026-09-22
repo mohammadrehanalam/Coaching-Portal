@@ -213,7 +213,10 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h4 id="pdfTitle">Checked Answer Sheet</h4>
-                <button class="close-btn" onclick="closeModal()">&times;</button>
+                <div style="display: flex; gap: 12px; align-items: center;">
+                    <a id="pdfDirectLink" href="#" target="_blank" style="font-size: 13px; color: #4f46e5; text-decoration: none; font-weight: 600;">🔗 New Tab Me Kholein</a>
+                    <button class="close-btn" onclick="closeModal()">&times;</button>
+                </div>
             </div>
             <div class="modal-body">
                 <iframe id="pdfFrame" src=""></iframe>
@@ -233,7 +236,7 @@
             console.error("Error parsing student data from localStorage:", e);
         }
 
-        // Roll number check for both camelCase and snake_case
+        // Roll number check
         const rollNumber = student ? (student.roll_number || student.rollNumber) : null;
 
         if (!student || !rollNumber) {
@@ -279,8 +282,19 @@
         }
 
         function openPdf(title, url) {
+            let embedUrl = url;
+
+            // Drive URL se File ID nikal kar embed preview format me convert karna
+            if (url.includes('drive.google.com')) {
+                const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+                if (match && match[1]) {
+                    embedUrl = `https://drive.google.com/file/d/${match[1]}/preview`;
+                }
+            }
+
             document.getElementById('pdfTitle').innerText = title + " - Answer Sheet";
-            document.getElementById('pdfFrame').src = url;
+            document.getElementById('pdfFrame').src = embedUrl;
+            document.getElementById('pdfDirectLink').href = url;
             document.getElementById('pdfModal').style.display = 'flex';
         }
 
