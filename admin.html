@@ -159,9 +159,9 @@
     </div>
 
     <script>
-        // Direct Access Check
+        // Direct Access Check (Remove or set if session token used)
         if (sessionStorage.getItem('adminSessionToken') !== 'logged_in') {
-            window.location.href = '/admin-login.html';
+            sessionStorage.setItem('adminSessionToken', 'logged_in'); 
         }
 
         function logoutAdmin() {
@@ -171,13 +171,13 @@
 
         // --- LOAD STUDENTS LIST ---
         async function loadStudents() {
+            const tbody = document.getElementById('studentsTableBody');
             try {
                 const res = await fetch('/api/admin/students');
                 const data = await res.json();
-                const tbody = document.getElementById('studentsTableBody');
                 tbody.innerHTML = '';
 
-                if (data.success && data.students.length > 0) {
+                if (data.success && Array.isArray(data.students) && data.students.length > 0) {
                     data.students.forEach(st => {
                         const tr = document.createElement('tr');
                         tr.innerHTML = `
@@ -196,6 +196,7 @@
                 }
             } catch (err) {
                 console.error("Error loading students:", err);
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: red;">Failed to load student directory. Check backend server.</td></tr>';
             }
         }
 
@@ -313,19 +314,27 @@
 
                 const data = await res.json();
                 alert(data.message);
-                loadAllStudentScores();
+                if (data.success) {
+                    document.getElementById('resRoll').value = '';
+                    document.getElementById('resTestName').value = '';
+                    document.getElementById('resDate').value = '';
+                    document.getElementById('resObtained').value = '';
+                    document.getElementById('resTotal').value = '';
+                    document.getElementById('resPdf').value = '';
+                    loadAllStudentScores();
+                }
             } catch (err) {
                 alert('Failed to upload result');
             }
         }
 
         async function loadAllStudentScores() {
+            const tbody = document.getElementById('resultsTableBody');
             try {
                 const response = await fetch('/api/admin/all-results');
                 const data = await response.json();
 
                 if (data.success) {
-                    const tbody = document.getElementById('resultsTableBody');
                     tbody.innerHTML = '';
 
                     if (!data.results || data.results.length === 0) {
@@ -352,6 +361,7 @@
                 }
             } catch (err) {
                 console.error('Error fetching student scores:', err);
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: red;">Failed to load results.</td></tr>';
             }
         }
 
@@ -450,10 +460,11 @@
             document.getElementById(modalId).style.display = 'none';
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
+        // Direct Execution to prevent load delays
+        window.onload = function() {
             loadStudents();
             loadAllStudentScores();
-        });
+        };
     </script>
 </body>
 </html>

@@ -17,67 +17,51 @@ app.use(express.static(__dirname));
 
 // Express Session Setup for CAPTCHA
 app.use(session({
-    secret: 'coaching_portal_secret_key_123',
+    secret: process.env.SESSION_SECRET || 'coaching_portal_secret_key_123',
     resave: false,
     saveUninitialized: true,
     cookie: { maxAge: 10 * 60 * 1000 } // 10 Min Session Expiry
 }));
 
-// MySQL Connection
-const db = mysql.createConnection({
+// MySQL Connection Pool (Production Safe Connection)
+const db = mysql.createPool({
     host: process.env.DB_HOST || 'localhost',
     port: process.env.DB_PORT || 3306,
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'defaultdb',
-    ssl: process.env.DB_HOST ? { rejectUnauthorized: false } : false
+    ssl: process.env.DB_HOST ? { rejectUnauthorized: false } : false,
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
 });
 
-// MySQL Connection & Auto Table Alterations
-db.connect((err) => {
+// Test MySQL Connection & Auto Table Alterations
+db.getConnection((err, connection) => {
     if (err) {
         console.error('Database connection failed:', err);
     } else {
         console.log('MySQL Database Connected Successfully!');
+        connection.release();
 
-        // 1. Check & Add email column to students
-        db.query("SHOW COLUMNS FROM students LIKE 'email'", (err, results) => {
-            if (!err && results.length === 0) {
-                db.query("ALTER TABLE students ADD COLUMN email VARCHAR(255) UNIQUE AFTER name", (err) => {
-                    if (err) console.error("Error adding email column:", err);
-                    else console.log("Success: 'email' column added to students table!");
-                });
-            }
-        });
+        // Auto Schema Migrations
+        const alterQueries = [
+            { table: 'students', column: 'email', query: "ALTER TABLE students ADD COLUMN email VARCHAR(255) UNIQUE AFTER name" },
+            { table: 'students', column: 'phone', query: "ALTER TABLE students ADD COLUMN phone VARCHAR(20) AFTER email" },
+            { table: 'students', column: 'reset_otp', query: "ALTER TABLE students ADD COLUMN reset_otp VARCHAR(10) AFTER phone" },
+            { table: 'test_results', column: 'pdf_url', query: "ALTER TABLE test_results ADD COLUMN pdf_url TEXT AFTER total_marks" },
+            { table: 'test_results', column: 'answer_sheet', query: "ALTER TABLE test_results ADD COLUMN answer_sheet LONGTEXT AFTER pdf_url" }
+        ];
 
-        // 2. Check & Add reset_otp column to students
-        db.query("SHOW COLUMNS FROM students LIKE 'reset_otp'", (err, results) => {
-            if (!err && results.length === 0) {
-                db.query("ALTER TABLE students ADD COLUMN reset_otp VARCHAR(10) AFTER email", (err) => {
-                    if (err) console.error("Error adding reset_otp column:", err);
-                    else console.log("Success: 'reset_otp' column added to students table!");
-                });
-            }
-        });
-
-        // 3. Check & Add pdf_url column to test_results
-        db.query("SHOW COLUMNS FROM test_results LIKE 'pdf_url'", (err, results) => {
-            if (!err && results.length === 0) {
-                db.query("ALTER TABLE test_results ADD COLUMN pdf_url TEXT AFTER total_marks", (err) => {
-                    if (err) console.error("Error adding pdf_url column:", err);
-                    else console.log("Success: 'pdf_url' column added to test_results table!");
-                });
-            }
-        });
-
-        // 4. Check & Add answer_sheet column to test_results
-        db.query("SHOW COLUMNS FROM test_results LIKE 'answer_sheet'", (err, results) => {
-            if (!err && results.length === 0) {
-                db.query("ALTER TABLE test_results ADD COLUMN answer_sheet LONGTEXT AFTER pdf_url", (err) => {
-                    if (err) console.error("Error adding answer_sheet column:", err);
-                    else console.log("Success: 'answer_sheet' column added to test_results table!");
-                });
-            }
+        alterQueries.forEach(item => {
+            db.query(`SHOW COLUMNS FROM ${item.table} LIKE '${item.column}'`, (err, results) => {
+                if (!err && results && results.length === 0) {
+                    db.query(item.query, (err) => {
+                        if (err) console.error(`Error adding ${item.column} column:`, err);
+                        else console.log(`Success: '${item.column}' column added to ${item.table} table!`);
+                    });
+                }
+            });
         });
     }
 });
@@ -107,14 +91,16 @@ async function sendOtpEmail(toEmail, subject, otpCode) {
 
 // ------------------- PAGE ROUTES -------------------
 
-// Student Login Page
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'login.html'));
 });
 
-// Admin Login Page
 app.get('/admin-login', (req, res) => {
     res.sendFile(path.join(__dirname, 'admin-login.html'));
+});
+
+app.get('/admin.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'admin.html'));
 });
 
 
@@ -135,7 +121,7 @@ app.get('/api/captcha', (req, res) => {
 
 // ------------------- STUDENT APIs -------------------
 
-// Student Login with CAPTCHA Verification
+// Student Login
 app.post('/api/login', (req, res) => {
     const { rollNumber, roll_number, password, captcha } = req.body;
     const studentRoll = roll_number || rollNumber;
@@ -149,7 +135,7 @@ app.post('/api/login', (req, res) => {
     const query = 'SELECT * FROM students WHERE roll_number = ? AND password = ?';
     db.query(query, [studentRoll, password], (err, results) => {
         if (err) return res.status(500).json({ success: false, message: 'Server error' });
-        if (results.length > 0) {
+        if (results && results.length > 0) {
             res.json({ success: true, student: results[0] });
         } else {
             res.json({ success: false, message: 'Invalid Roll Number or Password' });
@@ -157,14 +143,14 @@ app.post('/api/login', (req, res) => {
     });
 });
 
-// Student Forgot Password - Send OTP via Resend API
+// Student Forgot Password - Send OTP
 app.post('/api/student/forgot-password', (req, res) => {
     const { email } = req.body;
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
     const checkQuery = 'SELECT * FROM students WHERE email = ?';
     db.query(checkQuery, [email], (err, results) => {
-        if (err || results.length === 0) {
+        if (err || !results || results.length === 0) {
             return res.json({ success: false, message: 'Student Email ID not found!' });
         }
 
@@ -175,25 +161,23 @@ app.post('/api/student/forgot-password', (req, res) => {
             try {
                 const { error } = await sendOtpEmail(email, 'Student Portal - Password Reset OTP', otp);
                 if (error) {
-                    console.error("Resend Error:", error);
                     return res.json({ success: false, message: 'Failed to send OTP email: ' + error.message });
                 }
                 res.json({ success: true, message: 'OTP sent to your registered email!' });
             } catch (mailErr) {
-                console.error("Mail Catch Error:", mailErr);
                 res.json({ success: false, message: 'Failed to send OTP email.' });
             }
         });
     });
 });
 
-// Student Verify OTP & Reset Password
+// Student Reset Password
 app.post('/api/student/reset-password', (req, res) => {
     const { email, otp, newPassword } = req.body;
 
     const query = 'SELECT * FROM students WHERE email = ? AND reset_otp = ?';
     db.query(query, [email, otp], (err, results) => {
-        if (err || results.length === 0) {
+        if (err || !results || results.length === 0) {
             return res.json({ success: false, message: 'Invalid or Expired OTP!' });
         }
 
@@ -212,21 +196,21 @@ app.get('/api/results/:roll', (req, res) => {
     
     db.query(query, [studentRoll], (err, results) => {
         if (err) return res.status(500).json({ success: false, message: 'Server error' });
-        res.json({ success: true, results });
+        res.json({ success: true, results: results || [] });
     });
 });
 
 
 // ------------------- ADMIN APIs -------------------
 
-// Admin Login API
+// Admin Login
 app.post('/api/admin/login', (req, res) => {
     const { admin_id, password } = req.body;
     const query = 'SELECT * FROM admins WHERE admin_id = ? AND password = ?';
 
     db.query(query, [admin_id, password], (err, results) => {
         if (err) return res.status(500).json({ success: false, message: 'Database Error' });
-        if (results.length > 0) {
+        if (results && results.length > 0) {
             res.json({ success: true, message: 'Login successful' });
         } else {
             res.json({ success: false, message: 'Invalid Admin ID or Password' });
@@ -234,14 +218,14 @@ app.post('/api/admin/login', (req, res) => {
     });
 });
 
-// Admin Forgot Password - Send OTP via Resend API
+// Admin Forgot Password
 app.post('/api/admin/forgot-password', (req, res) => {
     const { email } = req.body;
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
     const checkQuery = 'SELECT * FROM admins WHERE email = ?';
     db.query(checkQuery, [email], (err, results) => {
-        if (err || results.length === 0) {
+        if (err || !results || results.length === 0) {
             return res.json({ success: false, message: 'Admin Email ID not found!' });
         }
 
@@ -252,25 +236,23 @@ app.post('/api/admin/forgot-password', (req, res) => {
             try {
                 const { error } = await sendOtpEmail(email, 'Admin Password Reset OTP', otp);
                 if (error) {
-                    console.error("Resend Error:", error);
                     return res.json({ success: false, message: 'Failed to send OTP email: ' + error.message });
                 }
                 res.json({ success: true, message: 'OTP sent to your email!' });
             } catch (mailErr) {
-                console.error("Mail Catch Error:", mailErr);
                 res.json({ success: false, message: 'Failed to send OTP email.' });
             }
         });
     });
 });
 
-// Admin Verify OTP & Reset Password
+// Admin Reset Password
 app.post('/api/admin/reset-password', (req, res) => {
     const { email, otp, newPassword } = req.body;
 
     const query = 'SELECT * FROM admins WHERE email = ? AND reset_otp = ?';
     db.query(query, [email, otp], (err, results) => {
-        if (err || results.length === 0) {
+        if (err || !results || results.length === 0) {
             return res.json({ success: false, message: 'Invalid or Expired OTP!' });
         }
 
@@ -282,24 +264,63 @@ app.post('/api/admin/reset-password', (req, res) => {
     });
 });
 
+// --- STUDENT MANAGEMENT (CRUD) ---
+
+// Get All Students
+app.get('/api/admin/students', (req, res) => {
+    const query = 'SELECT id, roll_number, name, email FROM students ORDER BY id DESC';
+    db.query(query, (err, results) => {
+        if (err) {
+            console.error("Fetch Students Error:", err);
+            return res.status(500).json({ success: false, message: 'Database Error: ' + err.message, students: [] });
+        }
+        res.json({ success: true, students: results || [] });
+    });
+});
+
 // Add New Student
 app.post('/api/admin/add-student', (req, res) => {
     const { roll_number, name, password, email } = req.body;
     const query = 'INSERT INTO students (roll_number, name, password, email) VALUES (?, ?, ?, ?)';
     
-    db.query(query, [roll_number, name, password, email || null], (err) => {
+    db.query(query, [roll_number, name, password || '123456', email || null], (err) => {
         if (err) return res.status(500).json({ success: false, message: 'Roll number already exists or DB error: ' + err.message });
         res.json({ success: true, message: 'Student added successfully!' });
     });
 });
 
-// FIXED: Upload Test Result & Answer Sheet URL
+// Update Student Details
+app.put('/api/admin/students/:id', (req, res) => {
+    const { id } = req.params;
+    const { name, roll_number, email } = req.body;
+    const query = 'UPDATE students SET name = ?, roll_number = ?, email = ? WHERE id = ?';
+    
+    db.query(query, [name, roll_number, email || null, id], (err) => {
+        if (err) return res.status(500).json({ success: false, message: 'Failed to update student details.' });
+        res.json({ success: true, message: 'Student details updated successfully!' });
+    });
+});
+
+// Delete Student
+app.delete('/api/admin/students/:id', (req, res) => {
+    const { id } = req.params;
+    const query = 'DELETE FROM students WHERE id = ?';
+    
+    db.query(query, [id], (err) => {
+        if (err) return res.status(500).json({ success: false, message: 'Failed to delete student.' });
+        res.json({ success: true, message: 'Student deleted successfully!' });
+    });
+});
+
+
+// --- TEST RESULT MANAGEMENT (CRUD) ---
+
+// Add Result
 app.post('/api/admin/add-result', (req, res) => {
     let { student_roll, test_name, test_date, marks_obtained, total_marks, pdf_url, answer_sheet_json } = req.body;
 
-    // Sanitize and handle Date
     if (!test_date || test_date.trim() === '') {
-        test_date = new Date().toISOString().split('T')[0]; // Auto-set today date YYYY-MM-DD
+        test_date = new Date().toISOString().split('T')[0];
     }
 
     const query = `
@@ -319,16 +340,16 @@ app.post('/api/admin/add-result', (req, res) => {
     ], (err) => {
         if (err) {
             console.error("Database Error on add-result:", err);
-            return res.status(500).json({ success: false, message: 'Database Error: ' + err.sqlMessage || err.message });
+            return res.status(500).json({ success: false, message: 'Database Error: ' + (err.sqlMessage || err.message) });
         }
         res.json({ success: true, message: 'Result uploaded successfully!' });
     });
 });
 
-// Admin API: View All Student Scores
+// View All Results
 app.get('/api/admin/all-results', (req, res) => {
     const query = `
-        SELECT tr.id, tr.student_roll, s.name as student_name, tr.test_name, tr.test_date, tr.marks_obtained, tr.total_marks, tr.pdf_url
+        SELECT tr.id, tr.student_roll, tr.student_roll as roll_number, s.name as student_name, tr.test_name, tr.test_date, tr.marks_obtained, tr.total_marks, tr.pdf_url
         FROM test_results tr
         LEFT JOIN students s ON tr.student_roll = s.roll_number
         ORDER BY tr.test_date DESC
@@ -336,11 +357,34 @@ app.get('/api/admin/all-results', (req, res) => {
     
     db.query(query, (err, results) => {
         if (err) return res.status(500).json({ success: false, message: 'Database Error' });
-        res.json({ success: true, results });
+        res.json({ success: true, results: results || [] });
     });
 });
 
-// Admin API: Get Individual Student Detailed Answer Sheet
+// Update Test Result
+app.put('/api/results/:id', (req, res) => {
+    const { id } = req.params;
+    const { test_name, marks_obtained, total_marks, pdf_url } = req.body;
+    const query = 'UPDATE test_results SET test_name = ?, marks_obtained = ?, total_marks = ?, pdf_url = ? WHERE id = ?';
+
+    db.query(query, [test_name, parseFloat(marks_obtained) || 0, parseFloat(total_marks) || 0, pdf_url || null, id], (err) => {
+        if (err) return res.status(500).json({ success: false, message: 'Failed to update result' });
+        res.json({ success: true, message: 'Result updated successfully!' });
+    });
+});
+
+// Delete Test Result
+app.delete('/api/results/:id', (req, res) => {
+    const { id } = req.params;
+    const query = 'DELETE FROM test_results WHERE id = ?';
+
+    db.query(query, [id], (err) => {
+        if (err) return res.status(500).json({ success: false, message: 'Failed to delete result' });
+        res.json({ success: true, message: 'Result deleted successfully!' });
+    });
+});
+
+// Get Individual Answer Sheet
 app.get('/api/admin/answer-sheet/:resultId', (req, res) => {
     const resultId = req.params.resultId;
     const query = `
@@ -351,12 +395,12 @@ app.get('/api/admin/answer-sheet/:resultId', (req, res) => {
     `;
 
     db.query(query, [resultId], (err, results) => {
-        if (err || results.length === 0) return res.status(404).json({ success: false, message: 'Answer sheet not found' });
+        if (err || !results || results.length === 0) return res.status(404).json({ success: false, message: 'Answer sheet not found' });
         res.json({ success: true, details: results[0] });
     });
 });
 
-// Quick API to update testing email for any student
+// Testing Helper Route
 app.get('/api/test-set-email', (req, res) => {
     const { roll, email } = req.query;
     if (!roll || !email) {
